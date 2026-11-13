@@ -1,0 +1,7 @@
+README.md
+pyproject.toml
+src/dimred.egg-info/PKG-INFO
+src/dimred.egg-info/SOURCES.txt
+src/dimred.egg-info/dependency_links.txt
+src/dimred.egg-info/top_level.txt
+tests/test_sanity.py

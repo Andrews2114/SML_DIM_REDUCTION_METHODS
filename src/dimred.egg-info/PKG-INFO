@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: dimred
+Version: 0.1.0
+Summary: Comparison of UMAP, t-SNE and autoencoders for nonlinear dimensionality reduction
+Requires-Python: >=3.10

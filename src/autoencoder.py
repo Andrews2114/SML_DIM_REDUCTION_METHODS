@@ -7,7 +7,6 @@ import numpy as np
 import torch
 from torch import nn
 
-
 def _mlp(sizes, act, dropout):
     layers = []
     for i in range(len(sizes) - 1):

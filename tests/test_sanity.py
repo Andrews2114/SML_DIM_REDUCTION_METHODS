@@ -1,8 +1,9 @@
 import numpy as np
 import pytest
 
-from dimred import get_method, make_dataset
-from dimred.metrics import dist_corr, rnx_curve, trust_continuity
+from methods import get_method
+from data import make_dataset
+from metrics import dist_corr, rnx_curve, trust_continuity
 
 
 def test_identity_embedding_is_perfect():
