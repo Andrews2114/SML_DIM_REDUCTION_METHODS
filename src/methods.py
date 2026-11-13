@@ -33,7 +33,7 @@ def get_method(name, seed=0, n_components=2, **params):
         p = {"n_neighbors": 15, "min_dist": 0.1, **params}
         return _SK(umap.UMAP(n_components=n_components, random_state=seed, **p))
     if name == "ae":
-        from .autoencoder import AEReducer
+        from autoencoder import AEReducer
         return AEReducer(n_components=n_components, seed=seed, **params)
     raise ValueError(f"unknown method {name!r}; choose from {METHODS}")
 

@@ -41,10 +41,10 @@ def test_linear_autoencoder_spans_pca_subspace():
     from scipy.linalg import subspace_angles
     from sklearn.decomposition import PCA
     X = make_dataset("swiss_roll", n=1000, D=20, noise=0.05).X
-    ae = get_method("ae", n_components=3, hidden=(), epochs=400, patience=400, lr=5e-3, val_frac=0.0)
+    ae = get_method("ae", n_components=3, hidden=(), epochs=400, patience=400, lr=5e-3,weight_decay=1e-3, val_frac=0.0)
     ae.fit(X)
-    W = ae.enc[0].weight.detach().numpy()                     # (3, D) encoder weights, standardized space
+    W = ae.dec[0].weight.detach().numpy()                     # (3, D) encoder weights, standardized space
     Xs = (X - X.mean(0)) / (X.std(0) + 1e-8)
     V = PCA(3).fit(Xs).components_                            # (3, D)
-    angles = subspace_angles(W.T, V.T)
+    angles = subspace_angles(W, V.T) #Decoder does not need transpose
     assert np.max(angles) < 0.3                               # radians; ~0 when subspaces coincide
