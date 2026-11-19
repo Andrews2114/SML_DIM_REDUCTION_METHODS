@@ -6,3 +6,5 @@ matplotlib
 umap-learn
 torch
 pytest
+streamlit>=1.50
+plotly
