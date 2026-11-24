@@ -1,0 +1,3 @@
+S10 {'bary_acc': 0.987, 'bary_bal': 0.77, 'ot_acc': 0.942, 'ot_bal': 0.916, 'ot_range_ratio': 1.84, 'train_cv_acc': 1.0}
+S30 {'bary_acc': 0.99, 'bary_bal': 0.87, 'ot_acc': 0.643, 'ot_bal': 0.639, 'ot_range_ratio': 2.787, 'train_cv_acc': 1.0}
+S100 {'bary_acc': 0.991, 'bary_bal': 0.904, 'ot_acc': 0.528, 'ot_bal': 0.528, 'ot_range_ratio': 3.814, 'train_cv_acc': 1.0}

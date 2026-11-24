@@ -3,6 +3,8 @@
 Run from the repo root:   streamlit run app.py
 Reuses the project's own modules in src/ (data, methods, metrics, autoencoder); nothing there is modified.
 """
+import base64
+import io
 import sys
 import time
 from pathlib import Path
@@ -11,6 +13,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 from scipy.spatial.distance import pdist
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))   # flat imports, as in tests/
@@ -53,6 +56,66 @@ st.markdown(f"""
   [data-testid="stSidebar"] {{ background: #f8fafc; }}
   div.stButton > button[kind="primary"] {{ border-radius: 10px; font-weight: 600; padding: .55rem 1.6rem; }}
 </style>""", unsafe_allow_html=True)
+
+
+def digits_grid_html(figs, digits, height_per_row=360, cols=3):
+    """All scatter plots in one client-side HTML block. Clicking a point shows that digit above it
+    (pure JavaScript: no Streamlit rerun, so it is instant)."""
+    import json
+    from plotly.offline import get_plotlyjs
+    payload = json.dumps([json.loads(f.to_json()) for f in figs])
+    px = json.dumps(np.asarray(digits).astype(int).ravel().tolist())
+    rows = -(-len(figs) // cols)
+    return f"""
+<meta charset="utf-8">
+<style>
+  body {{ margin:0; font-family: Inter, system-ui, sans-serif; }}
+  #grid {{ display:grid; grid-template-columns: repeat({cols}, 1fr); gap: 4px; }}
+  .cell {{ position:relative; height:{height_per_row - 10}px; }}
+  .thumb {{ position:absolute; display:none; pointer-events:none; z-index:10; background:#fff;
+            border:1px solid #cbd5e1; border-radius:10px; padding:6px; box-shadow:0 6px 20px rgba(15,23,42,.22); }}
+  .thumb canvas {{ width:120px; height:120px; display:block; border-radius:4px; image-rendering:pixelated; border:1px solid #e2e8f0; }}
+  .thumb div {{ text-align:center; font-size:12px; color:#475569; margin-top:4px; }}
+  .js-plotly-plot .scatterlayer .trace .points path {{ cursor:pointer; }}
+</style>
+<div id="grid"></div>
+<script>{get_plotlyjs()}</script>
+<script>
+const FIGS = {payload}, PIX = {px};
+const grid = document.getElementById('grid');
+function drawDigit(canvas, idx) {{
+  // the original 8x8 image, unmodified (0 = white, 16 = black), shown as crisp pixels
+  const ctx = canvas.getContext('2d'), img = ctx.createImageData(8, 8);
+  for (let i = 0; i < 64; i++) {{
+    const g = 255 - Math.round(255 * PIX[idx*64 + i] / 16);
+    img.data.set([g, g, g, 255], 4 * i);
+  }}
+  ctx.putImageData(img, 0, 0);
+}}
+FIGS.forEach((f, k) => {{
+  const cell = document.createElement('div'); cell.className = 'cell';
+  const plot = document.createElement('div'); plot.style.height = '100%';
+  const th = document.createElement('div'); th.className = 'thumb';
+  th.innerHTML = '<canvas width="8" height="8"></canvas><div></div>';
+  cell.append(plot, th); grid.append(cell);
+  const cv = th.querySelector('canvas'), cap = th.querySelector('div');
+  f.layout.height = {height_per_row - 10};
+  Plotly.newPlot(plot, f.data, f.layout, {{displayModeBar:false, responsive:true}}).then(() => {{
+    plot.on('plotly_click', ev => {{
+      const p = ev.points[0], idx = p.customdata;
+      drawDigit(cv, idx);
+      cap.textContent = 'sample ' + idx + ' \\u00b7 ' + p.data.name;
+      const x = p.xaxis.d2p(p.x) + p.xaxis._offset, y = p.yaxis.d2p(p.y) + p.yaxis._offset;
+      const w = 134, h = 160, W = plot.clientWidth;
+      th.style.left = Math.max(2, Math.min(W - w - 2, x - w/2)) + 'px';
+      th.style.top = Math.max(2, y - h - 10) + 'px';
+      th.style.display = 'block';
+    }});
+    plot.on('plotly_doubleclick', () => th.style.display = 'none');
+    plot.on('plotly_relayout', () => th.style.display = 'none');
+  }});
+}});
+</script>"""
 
 
 def style_fig(fig, height=360, title=None, color=INK):
@@ -105,21 +168,26 @@ def evaluate(X, Z, T, y, k, rnx):
 
 
 def scatter(Z, color, discrete, accent, title):
+    """Returns (fig, idx_by_trace): idx_by_trace[curve][point] = row index in X (for click-to-select)."""
     fig = go.Figure()
+    idx_by_trace = []
     if discrete:
         labels = np.asarray(color)
         for i, c in enumerate(sorted(set(labels.tolist()))):
             s = labels == c
-            fig.add_scatter(x=Z[s, 0], y=Z[s, 1], mode="markers", name=str(c),
+            idx_by_trace.append(np.flatnonzero(s))
+            fig.add_scatter(x=Z[s, 0], y=Z[s, 1], mode="markers", name=str(c), customdata=np.flatnonzero(s),
+                            hoverinfo="none",
                             marker=dict(size=5, color=CLASS_COLORS[i % 10], opacity=0.85))
     else:
+        idx_by_trace.append(np.arange(len(Z)))
         fig.add_scatter(x=Z[:, 0], y=Z[:, 1], mode="markers", showlegend=False,
                         marker=dict(size=5, color=color, colorscale="Viridis", opacity=0.9))
     style_fig(fig, 340, title, accent)
     fig.update_layout(showlegend=discrete, legend=dict(orientation="h", y=-0.05, font=dict(size=10)))
     fig.update_xaxes(visible=False)
     fig.update_yaxes(visible=False, scaleanchor="x")
-    return fig
+    return fig, idx_by_trace
 
 
 # ----------------------------------------------------------------------------- sidebar
@@ -207,7 +275,7 @@ if run and chosen:
             st.error(f"{NAME[m]} failed: {type(e).__name__}: {e}")
     prog.empty()
     st.session_state.update(res=res, color=color, discrete=(y is not None and T is None),
-                            rnx=do_rnx, X=X, ae_linear=cfg.get("ae", {}).get("hidden") == ())
+                            rnx=do_rnx, X=X, is_digits=(ds_name == "digits (64-D)"), ae_linear=cfg.get("ae", {}).get("hidden") == ())
 
 res = st.session_state.get("res")
 if res and len(st.session_state["color"]) == n:
@@ -217,11 +285,21 @@ if res and len(st.session_state["color"]) == n:
         labels["ae"] = "Linear autoencoder"
 
     # ---- embeddings
-    for row in range(0, len(res), 3):
-        batch = list(res.items())[row: row + 3]
-        for col, (m, (Z, ev, _)) in zip(st.columns(3), batch):
-            col.plotly_chart(scatter(Z, st.session_state["color"], discrete, ACCENT[m], labels[m]),
-                             width="stretch", key=f"sc_{m}")
+    is_digits = st.session_state.get("is_digits", False)
+    if is_digits:
+        st.caption("Click a point to see its digit (double-click the plot to hide it).")
+        figs = [scatter(Z, st.session_state["color"], discrete, ACCENT[m], labels[m])[0] for m, (Z, _, _) in res.items()]
+        html, h = digits_grid_html(figs, Xr).strip(), 360 * -(-len(figs) // 3) + 10
+        if hasattr(st, "iframe"):          # newer Streamlit
+            st.iframe(html, height=h)
+        else:
+            components.html(html, height=h)
+    else:
+        for row in range(0, len(res), 3):
+            batch = list(res.items())[row: row + 3]
+            for col, (m, (Z, ev, _)) in zip(st.columns(3), batch):
+                col.plotly_chart(scatter(Z, st.session_state["color"], discrete, ACCENT[m], labels[m])[0],
+                                 width="stretch", key=f"sc_{m}")
 
     # ---- best-per-metric cards
     table = pd.DataFrame({labels[m]: ev for m, (_, ev, _) in res.items()}).T
